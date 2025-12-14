@@ -1,7 +1,7 @@
+# ------------------ FLASK SERVER FOR RENDER ------------------
 from flask import Flask
 import threading
 
-# ----------- FLASK SERVER (IMPORTANT) -----------
 app_server = Flask(__name__)
 
 @app_server.route("/")
@@ -10,9 +10,10 @@ def home():
 
 def run_flask():
     app_server.run(host="0.0.0.0", port=10000)
-# -----------------------------------------------
+# -------------------------------------------------------------
 
 
+# ------------------ TELEGRAM BOT CODE ------------------------
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
@@ -35,6 +36,100 @@ CHANNELS = [
 
 TOTAL_USERS = set()
 logging.basicConfig(level=logging.INFO)
+
+
+# ------------------ BUTTON GENERATOR -------------------------
+def force_buttons():
+    btns = []
+    for ch in CHANNELS:
+        btns.append([InlineKeyboardButton(ch["name"], url=ch["link"])])
+    btns.append([InlineKeyboardButton("✔ Joined", callback_data="joined")])
+    return InlineKeyboardMarkup(btns)
+
+
+# ------------------ START COMMAND ----------------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user.id
+    TOTAL_USERS.add(user)
+
+    await update.message.reply_text(
+        "⚠ Please join all channels first:",
+        reply_markup=force_buttons()
+    )
+
+
+# ------------------ JOIN BUTTON CALLBACK ---------------------
+async def joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+
+    await query.message.edit_text(
+        "🎉 Access Granted!\nHere are all channel links:",
+        reply_markup=force_buttons()
+    )
+
+
+# ------------------ BROADCAST (FIXED VERSION) -----------------
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    if not update.message.reply_to_message:
+        await update.message.reply_text("Broadcast ke liye reply karo.")
+        return
+
+    msg = update.message.reply_to_message
+    success = 0
+    fail = 0
+
+    for user in list(TOTAL_USERS):
+        try:
+            await context.bot.copy_message(
+                chat_id=user,
+                from_chat_id=msg.chat_id,
+                message_id=msg.message_id
+            )
+            success += 1
+        except:
+            fail += 1
+
+    await update.message.reply_text(
+        f"📢 Broadcast completed!\nSuccess: {success}\nFail: {fail}"
+    )
+
+
+# ------------------ STATS ------------------------------------
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    await update.message.reply_text(
+        f"📊 Stats:\nTotal Users: {len(TOTAL_USERS)}"
+    )
+
+
+# ------------------ MAIN FUNCTION ----------------------------
+async def main():
+    # Start Flask server in background
+    threading.Thread(target=run_flask).start()
+
+    # Start Telegram bot
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CallbackQueryHandler(joined, pattern="joined"))
+
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await app.idle()
+
+
+# ------------------ RUN --------------------------------------
+import asyncio
+if __name__ == "__main__":
+    asyncio.run(main())logging.basicConfig(level=logging.INFO)
 
 
 # ----------- BUTTONS -----------
