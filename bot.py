@@ -1,8 +1,17 @@
-"""
-==================== REQUIREMENTS ====================
-pip install python-telegram-bot==20.3
-======================================================
-"""
+from flask import Flask
+import threading
+
+# ----------- FLASK SERVER (IMPORTANT) -----------
+app_server = Flask(__name__)
+
+@app_server.route("/")
+def home():
+    return "Bot is running on Render!"
+
+def run_flask():
+    app_server.run(host="0.0.0.0", port=10000)
+# -----------------------------------------------
+
 
 import logging
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -14,9 +23,8 @@ from telegram.ext import (
 BOT_TOKEN = "8522287264:AAG3f1B87DN2BOUzBh1YKHXAerYLh2Blxoo"
 ADMINS = [7764057183]
 
-# CHANNELS WITH YOUR INVITE LINKS
 CHANNELS = [
-    {"name": " BackUp Channel", "link": "https://t.me/+5VpjgantffdlOWM1"},
+    {"name": "BackUp Channel", "link": "https://t.me/+5VpjgantffdlOWM1"},
     {"name": "Channel 2", "link": "https://t.me/+QL7HaAXjTeNmNWVl"},
     {"name": "Channel 3", "link": "https://t.me/+jmiP8aD4jSs4ZGY1"},
     {"name": "Channel 4", "link": "https://t.me/+Gm80WqnuhD82ZTU1"},
@@ -28,7 +36,8 @@ CHANNELS = [
 TOTAL_USERS = set()
 logging.basicConfig(level=logging.INFO)
 
-# BUTTON GENERATOR
+
+# ----------- BUTTONS -----------
 def force_buttons():
     btns = []
     for ch in CHANNELS:
@@ -36,7 +45,8 @@ def force_buttons():
     btns.append([InlineKeyboardButton("✔ Joined", callback_data="joined")])
     return InlineKeyboardMarkup(btns)
 
-# START COMMAND
+
+# -------- START COMMAND --------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user.id
     TOTAL_USERS.add(user)
@@ -46,7 +56,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=force_buttons()
     )
 
-# JOIN BUTTON CALLBACK
+
+# -------- JOIN CALLBACK --------
 async def joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
 
@@ -55,7 +66,8 @@ async def joined(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=force_buttons()
     )
 
-# BROADCAST
+
+# -------- BROADCAST --------
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id not in ADMINS:
         return
@@ -65,6 +77,56 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     msg = update.message.reply_to_message
+    success = 0
+    fail = 0
+
+    for user in list(TOTAL_USERS):
+        try:
+            await context.bot.copy_message(
+                chat_id=user,
+                from_chat_id=msg.chat_id,
+                message_id=msg.message_id
+            )
+            success += 1
+        except:
+            fail += 1
+
+    await update.message.reply_text(
+        f"📢 Broadcast completed!\nSuccess: {success}\nFail: {fail}"
+    )
+
+
+# -------- STATS --------
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMINS:
+        return
+
+    await update.message.reply_text(
+        f"📊 Stats:\nTotal Users: {len(TOTAL_USERS)}"
+    )
+
+
+# -------- MAIN RUN --------
+async def main():
+    # Start Flask server in background thread
+    threading.Thread(target=run_flask).start()
+
+    # Start Telegram bot
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CallbackQueryHandler(joined, pattern="joined"))
+
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await app.idle()
+
+
+import asyncio
+if __name__ == "__main__":
+    asyncio.run(main())    msg = update.message.reply_to_message
     success = 0
     fail = 0
 
